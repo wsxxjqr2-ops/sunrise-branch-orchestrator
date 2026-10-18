@@ -163,7 +163,7 @@ func (m *Manager) executeChatAgentSwitch(
 	if err := m.chat.PreflightChat(
 		ctx,
 		cfg.TargetHarness,
-		effectiveAgentConfig(cfg.TargetHarness, rec.Kind, project.Config).Permissions,
+		effectiveAgentConfigForRole(cfg.TargetHarness, rec.Kind, rec.Role, project.Config).Permissions,
 	); err != nil {
 		return result, fmt.Errorf("switch Chat agent %s: target preflight: %w", id, err)
 	}
@@ -171,7 +171,7 @@ func (m *Manager) executeChatAgentSwitch(
 	if !ok {
 		return result, fmt.Errorf("switch Chat agent %s: %w", id, ErrInterfaceHandoffUnsupported)
 	}
-	baseAgentConfig := effectiveAgentConfig(cfg.TargetHarness, rec.Kind, project.Config)
+	baseAgentConfig := effectiveAgentConfigForRole(cfg.TargetHarness, rec.Kind, rec.Role, project.Config)
 	agentConfig, err := m.resolveAgentConfig(ctx, ports.SpawnConfig{
 		ProjectID: rec.ProjectID,
 		Kind:      rec.Kind,
@@ -184,7 +184,7 @@ func (m *Manager) executeChatAgentSwitch(
 		return result, fmt.Errorf("switch Chat agent %s: target config: %w", id, err)
 	}
 
-	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID, rec.ID, rec.RequestedOutput, true)
+	systemPrompt, err := m.buildSystemPromptForRole(ctx, rec.Kind, rec.Role, rec.ProjectID, rec.ID, rec.RequestedOutput, true)
 	if err != nil {
 		return result, fmt.Errorf("switch Chat agent %s: system prompt: %w", id, err)
 	}
@@ -618,7 +618,7 @@ func (m *Manager) rollbackStoppedChatAgentSwitchSource(
 	if !ok {
 		return ErrUnknownHarness
 	}
-	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID, rec.ID, rec.RequestedOutput, true)
+	systemPrompt, err := m.buildSystemPromptForRole(ctx, rec.Kind, rec.Role, rec.ProjectID, rec.ID, rec.RequestedOutput, true)
 	if err != nil {
 		return err
 	}
@@ -626,7 +626,7 @@ func (m *Manager) rollbackStoppedChatAgentSwitchSource(
 	if err != nil {
 		return err
 	}
-	agentConfig := effectiveAgentConfig(rec.Harness, rec.Kind, project.Config)
+	agentConfig := effectiveAgentConfigForRole(rec.Harness, rec.Kind, rec.Role, project.Config)
 	env := m.runtimeEnv(rec.ID, rec.ProjectID, rec.IssueID, project.Config.Env)
 	m.augmentAgentRuntimeEnv(sourceAgent, env)
 	if err := m.prepareWorkspace(

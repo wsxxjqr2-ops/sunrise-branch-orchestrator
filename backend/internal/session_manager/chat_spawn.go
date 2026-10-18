@@ -216,7 +216,7 @@ func (m *Manager) launchChatController(ctx context.Context, in chatSpawn) (domai
 	defer releaseCodexAdmission()
 	agentConfig := in.cfg.AgentConfig
 	if !in.cfg.AgentConfigResolved {
-		agentConfig = applySpawnAgentConfig(effectiveAgentConfig(in.cfg.Harness, in.cfg.Kind, in.project.Config), in.cfg.AgentConfig)
+		agentConfig = applySpawnAgentConfig(effectiveAgentConfigForRole(in.cfg.Harness, in.cfg.Kind, in.cfg.Role, in.project.Config), in.cfg.AgentConfig)
 	}
 
 	var diffBaseSHA, diffBaseRef string
@@ -477,7 +477,7 @@ func (m *Manager) resumeChatController(
 
 	// Recomputed rather than persisted, matching the terminal path: a restored
 	// session keeps its standing instructions across the relaunch.
-	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID, rec.ID, rec.RequestedOutput, true)
+	systemPrompt, err := m.buildSystemPromptForRole(ctx, rec.Kind, rec.Role, rec.ProjectID, rec.ID, rec.RequestedOutput, true)
 	if err != nil {
 		return RestoreResult{}, fmt.Errorf("%s %s: system prompt: %w", operation, rec.ID, err)
 	}

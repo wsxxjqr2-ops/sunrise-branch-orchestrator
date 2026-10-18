@@ -38,6 +38,7 @@ import {
 	Smartphone,
 	Trash2,
 	User,
+	Network,
 	X,
 	ArrowLeft,
 } from "lucide-react";
@@ -78,6 +79,7 @@ import { getSessionStatusDotView } from "../lib/session-presentation";
 import { deriveSessionAgentSwitchPresentation } from "../lib/agent-switch-presentation";
 import { aoBridge } from "../lib/bridge";
 import { hasTrustedApiBaseUrl } from "../lib/api-client";
+import { clientForSessionHost } from "../lib/host-clients";
 import { useCommandPaletteEnabled } from "../hooks/useCommandPaletteEnabled";
 import { canResumeAgent, resumeAgentOnOpen, useCanResumeAgent } from "../hooks/useCanResumeAgent";
 import { cloudSessionsQueryKey, workspaceQueryKey, workspaceQueryKeyForHost } from "../hooks/useWorkspaceQuery";
@@ -1449,6 +1451,7 @@ const ProjectItem = memo(function ProjectItem({
 	const [isRemoving, setIsRemoving] = useState(false);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [isSpawning, setIsSpawning] = useState(false);
+	const [isSpawningArchitect, setIsSpawningArchitect] = useState(false);
 	// Skip enter animation on first mount — sessions arrive async and we don't
 	// want them to slide in on every sidebar load. Only animate on subsequent
 	// expand/collapse toggles.
@@ -1594,6 +1597,28 @@ const ProjectItem = memo(function ProjectItem({
 			console.error("Failed to spawn orchestrator:", err);
 		} finally {
 			setIsSpawning(false);
+		}
+	};
+	const spawnArchitect = async () => {
+		if (isSpawningArchitect || isProjectProvisioning || isProjectRestarting) return;
+		setIsSpawningArchitect(true);
+		try {
+			const { data, error } = await clientForSessionHost(workspace.hostId).POST("/api/v1/sessions", {
+				body: {
+					projectId: workspace.id,
+					kind: "worker",
+					role: "architect",
+					requestedOutput: "artifact",
+					displayName: "架构师｜RFC与技术方案",
+				},
+			});
+			if (error || !data?.session?.id) throw new Error("无法启动架构师");
+			await queryClient.invalidateQueries({ queryKey: workspaceQueryKeyForHost(workspace.hostId) });
+			selection.goSession(workspace.id, data.session.id);
+		} catch (err) {
+			showGlobalToast("架构师启动失败", err instanceof Error ? err.message : "请稍后重试", "error");
+		} finally {
+			setIsSpawningArchitect(false);
 		}
 	};
 
@@ -1840,7 +1865,14 @@ const ProjectItem = memo(function ProjectItem({
 											<Plus aria-hidden="true" />
 											{t("shell.newTask")}
 										</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => selection.goSettings(workspace.id, workspace.cloudOrgId)}>
+											<DropdownMenuItem
+												disabled={isSpawningArchitect || isProjectRestarting || isProjectProvisioning}
+												onSelect={() => void spawnArchitect()}
+											>
+												<Network aria-hidden="true" />
+												{isSpawningArchitect ? t("shell.spawningArchitect") : t("shell.newArchitect")}
+											</DropdownMenuItem>
+											<DropdownMenuItem onSelect={() => selection.goSettings(workspace.id, workspace.cloudOrgId)}>
 											<Settings aria-hidden="true" />
 											{t("shell.projectSettings")}
 										</DropdownMenuItem>
@@ -2526,6 +2558,12 @@ const SessionRow = memo(function SessionRow({
 								>
 									{session.title}
 								</span>
+								{session.role === "architect" ? (
+									<Badge variant="outline" className="h-4 shrink-0 gap-1 px-1.5 text-2xs">
+										<Network aria-hidden="true" className="size-3" />
+													{t("shell.architect")}
+									</Badge>
+								) : null}
 								{hostLabel ? <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-2xs">{hostLabel}</Badge> : null}
 								{switchLabel ? (
 									<span id={switchStatusId} className="max-w-28 shrink-0 truncate text-2xs text-muted-foreground">

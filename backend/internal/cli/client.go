@@ -25,6 +25,17 @@ const commandTimeout = 2 * time.Minute
 // discards for keep-alive reuse without an unbounded read.
 const maxDrainedBodyBytes = 4 << 10
 
+// maxRawBodyBytes caps raw artifact reads made by the CLI. RFCs are text
+// artifacts, not an unbounded transport for arbitrary session data.
+const maxRawBodyBytes = 16 << 20
+
+// rawAPIResponse is used by commands that intentionally consume a non-JSON
+// daemon response, such as a session artifact file.
+type rawAPIResponse struct {
+	Body        []byte
+	ContentType string
+}
+
 // apiError is the subset of the daemon's JSON error envelope the CLI surfaces.
 // RequestID is surfaced so a failed command can be correlated with daemon logs.
 type apiError struct {
@@ -97,6 +108,12 @@ func (e apiError) String() string {
 // same way as mutating calls.
 func (c *commandContext) getJSON(ctx context.Context, path string, out any) error {
 	return c.doJSON(ctx, http.MethodGet, path, nil, out)
+}
+
+func (c *commandContext) getRaw(ctx context.Context, path string) (rawAPIResponse, error) {
+	var out rawAPIResponse
+	err := c.doJSON(ctx, http.MethodGet, path, nil, &out)
+	return out, err
 }
 
 // postJSON sends body as JSON to POST /api/v1/<path> on the running daemon and
@@ -213,6 +230,18 @@ func (c *commandContext) doJSONPathWithHeadersAndTimeout(
 		// posts). Drain only a bounded remainder so the connection can be
 		// reused without an unbounded read.
 		_, _ = io.CopyN(io.Discard, resp.Body, maxDrainedBodyBytes)
+		return nil
+	}
+	if raw, ok := out.(*rawAPIResponse); ok {
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxRawBodyBytes+1))
+		if err != nil {
+			return fmt.Errorf("read raw response: %w", err)
+		}
+		if len(body) > maxRawBodyBytes {
+			return fmt.Errorf("raw response exceeds %d bytes", maxRawBodyBytes)
+		}
+		raw.Body = body
+		raw.ContentType = resp.Header.Get("Content-Type")
 		return nil
 	}
 	// A 204 carries no body by contract; a zero-value out is the legitimate

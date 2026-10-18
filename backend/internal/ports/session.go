@@ -38,6 +38,7 @@ type SpawnConfig struct {
 	// Standing rules stay in SystemPrompt; issue facts belong to the user task.
 	IssueContext string
 	Kind         domain.SessionKind
+	Role         domain.SessionRole
 	Harness      domain.AgentHarness
 	Branch       string
 	Prompt       string

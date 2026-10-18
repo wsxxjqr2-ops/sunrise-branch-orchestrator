@@ -840,7 +840,7 @@ func (m *Manager) preflightInterfaceTarget(
 		if err != nil {
 			return err
 		}
-		permissions := effectiveAgentConfig(rec.Harness, rec.Kind, project.Config).Permissions
+		permissions := effectiveAgentConfigForRole(rec.Harness, rec.Kind, rec.Role, project.Config).Permissions
 		return m.chat.PreflightChat(ctx, rec.Harness, permissions)
 	}
 	agent, ok := m.agents.Agent(rec.Harness)
@@ -851,7 +851,7 @@ func (m *Manager) preflightInterfaceTarget(
 	if err != nil {
 		return err
 	}
-	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID, rec.ID, rec.RequestedOutput, false)
+	systemPrompt, err := m.buildSystemPromptForRole(ctx, rec.Kind, rec.Role, rec.ProjectID, rec.ID, rec.RequestedOutput, false)
 	if err != nil {
 		return err
 	}

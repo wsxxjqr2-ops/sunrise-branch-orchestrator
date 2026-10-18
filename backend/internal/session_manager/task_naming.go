@@ -44,7 +44,7 @@ func (m *Manager) startTaskNaming(ctx context.Context, cfg ports.SpawnConfig, re
 	case slots <- struct{}{}:
 		config := cfg.AgentConfig
 		if !cfg.AgentConfigResolved {
-			config = applySpawnAgentConfig(effectiveAgentConfig(cfg.Harness, cfg.Kind, projectConfig), config)
+			config = applySpawnAgentConfig(effectiveAgentConfigForRole(cfg.Harness, cfg.Kind, cfg.Role, projectConfig), config)
 		}
 		// Chat has already resolved model/effort; TUI callers carry their resolved
 		// config below. This temporary call never owns the worker's conversation.

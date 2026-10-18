@@ -271,6 +271,7 @@ func (s *Store) PromoteTaskPreparation(ctx context.Context, id domain.SessionID,
 	rows, err := s.qw.PromoteTaskPreparation(ctx, gen.PromoteTaskPreparationParams{
 		IssueID:            rec.IssueID,
 		Kind:               rec.Kind,
+		Role:               string(domain.NormalizeSessionRole(rec.Kind, rec.Role)),
 		Harness:            rec.Harness,
 		AutoReviewEnabled:  rec.AutoReviewEnabled,
 		DisplayName:        rec.DisplayName,
@@ -839,6 +840,7 @@ func rowToRecord(row gen.GetSessionRow) domain.SessionRecord {
 		AutomationLaunchCompleted: row.AutomationLaunchCompleted,
 		IssueID:                   row.IssueID,
 		Kind:                      row.Kind,
+		Role:                      sessionRoleFromStorage(row.Role),
 		Harness:                   row.Harness,
 		ReviewerHarness:           row.ReviewerHarness,
 		ReviewerConfig:            unmarshalAgentConfig(row.ReviewerAgentConfig),
@@ -906,6 +908,13 @@ func rowToRecord(row gen.GetSessionRow) domain.SessionRecord {
 	}
 }
 
+func sessionRoleFromStorage(raw string) domain.SessionRole {
+	if raw == string(domain.RoleWorker) || raw == string(domain.RoleOrchestrator) {
+		return ""
+	}
+	return domain.SessionRole(raw)
+}
+
 // decodeProvisionSteps reads the start-up checklist. A malformed value reads as
 // no checklist. Missing setup evidence never authorizes interrupted-request
 // cleanup, and ProvisionState stays the start's authoritative outcome.
@@ -953,6 +962,7 @@ func recordToInsert(rec domain.SessionRecord, num int64) gen.InsertSessionParams
 		Num:                              num,
 		IssueID:                          rec.IssueID,
 		Kind:                             rec.Kind,
+		Role:                             string(domain.NormalizeSessionRole(rec.Kind, rec.Role)),
 		Harness:                          rec.Harness,
 		ReviewerHarness:                  rec.ReviewerHarness,
 		ReviewerAgentConfig:              mustMarshalAgentConfig(rec.ReviewerConfig),
@@ -1022,6 +1032,7 @@ func recordToUpdate(rec domain.SessionRecord) gen.UpdateSessionParams {
 		ID:                               rec.ID,
 		IssueID:                          rec.IssueID,
 		Kind:                             rec.Kind,
+		Role:                             string(domain.NormalizeSessionRole(rec.Kind, rec.Role)),
 		Harness:                          rec.Harness,
 		ReviewerHarness:                  rec.ReviewerHarness,
 		ReviewerAgentConfig:              mustMarshalAgentConfig(rec.ReviewerConfig),

@@ -4778,6 +4778,8 @@ export interface components {
             /** @enum {string} */
             reviewerHarness?: "claude-code" | "codex" | "copilot" | "cursor" | "kilocode" | "opencode" | "opencode-v2" | "kiro" | "pi" | "agy" | "devin" | "droid" | "kimi" | "kimchi" | "muse" | "amp" | "aider" | "grok" | "crush" | "auggie" | "cline" | "autohand";
             /** @enum {string} */
+            role: "worker" | "architect" | "orchestrator";
+            /** @enum {string} */
             scmStatus?: "pr_open" | "draft" | "ci_failed" | "review_pending" | "changes_requested" | "commented" | "approved" | "mergeable" | "merged";
             /** @enum {string} */
             status: "working" | "pr_open" | "draft" | "ci_failed" | "review_pending" | "changes_requested" | "commented" | "approved" | "mergeable" | "merged" | "needs_input" | "exited" | "idle" | "terminated" | "no_signal";
@@ -5157,6 +5159,8 @@ export interface components {
             mode?: "tui" | "chat";
             model?: string;
             projectId: string;
+            /** @enum {string} */
+            role?: "worker" | "architect";
             taskPreparation?: string;
         };
         DelegateTaskResponse: {
@@ -5753,6 +5757,7 @@ export interface components {
             agentConfig?: components["schemas"]["AgentConfig"];
             agentRules?: string;
             agentRulesFile?: string;
+            architect?: components["schemas"]["RoleOverride"];
             autoReview?: boolean;
             canonicalRepoURL?: string;
             containerReap?: components["schemas"]["ContainerReapConfig"];
@@ -6655,6 +6660,8 @@ export interface components {
             prompt?: string;
             /** @enum {string} */
             requestedOutput?: "artifact";
+            /** @enum {string} */
+            role?: "worker" | "architect" | "orchestrator";
             /** @enum {string} */
             trackerProvider?: "github" | "gitlab";
         };

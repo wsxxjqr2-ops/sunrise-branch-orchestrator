@@ -25,6 +25,31 @@ const (
 	KindOrchestrator SessionKind = "orchestrator"
 )
 
+// SessionRole describes the project's responsibility assigned to a session.
+// Role is independent from SessionKind: an architect is a worker session with
+// a different coordination contract, while reviewers remain PR review runs.
+type SessionRole string
+
+const (
+	RoleWorker       SessionRole = "worker"
+	RoleArchitect    SessionRole = "architect"
+	RoleOrchestrator SessionRole = "orchestrator"
+)
+
+func (r SessionRole) Valid() bool {
+	return r == "" || r == RoleWorker || r == RoleArchitect || r == RoleOrchestrator
+}
+
+func NormalizeSessionRole(kind SessionKind, role SessionRole) SessionRole {
+	if role != "" {
+		return role
+	}
+	if kind == KindOrchestrator {
+		return RoleOrchestrator
+	}
+	return RoleWorker
+}
+
 // ConversationCheckpointState records which main-turn boundaries AO has
 // durably observed for the hook-derived replay checkpoint. The legacy value is
 // intentionally distinct: rows written before owner/event scoping may still be
@@ -277,6 +302,7 @@ type SessionRecord struct {
 	ClientRequestCommitted bool         `json:"-"`
 	IssueID                IssueID      `json:"issueId,omitempty"`
 	Kind                   SessionKind  `json:"kind"`
+	Role                   SessionRole  `json:"role" enum:"worker,architect,orchestrator"`
 	Harness                AgentHarness `json:"harness,omitempty"`
 	// ReviewerHarness is this session's preferred reviewer. Empty delegates to
 	// the project configuration.

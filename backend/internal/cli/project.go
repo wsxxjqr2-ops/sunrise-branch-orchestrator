@@ -20,6 +20,7 @@ type projectAddOptions struct {
 	name              string
 	workerAgent       string
 	orchestratorAgent string
+	architectAgent    string
 	asWorkspace       bool
 }
 
@@ -121,6 +122,7 @@ type projectConfig struct {
 	AgentConfig       agentConfig          `json:"agentConfig,omitempty"`
 	Worker            roleOverride         `json:"worker,omitempty"`
 	Orchestrator      roleOverride         `json:"orchestrator,omitempty"`
+	Architect         roleOverride         `json:"architect,omitempty"`
 	TrackerIntake     trackerIntakeConfig  `json:"trackerIntake,omitempty"`
 	AutoReview        bool                 `json:"autoReview,omitempty"`
 	// WorkersRequestReview must round-trip through set-config so a CLI edit
@@ -143,6 +145,7 @@ type projectSetConfigOptions struct {
 	permission        string
 	workerAgent       string
 	orchestratorAgent string
+	architectAgent    string
 	agentRules        string
 	agentRulesFile    string
 	orchestratorRules string
@@ -267,10 +270,11 @@ func newProjectAddCommand(ctx *commandContext) *cobra.Command {
 			if opts.name != "" {
 				req.Name = &opts.name
 			}
-			if opts.workerAgent != "" || opts.orchestratorAgent != "" {
+			if opts.workerAgent != "" || opts.orchestratorAgent != "" || opts.architectAgent != "" {
 				req.Config = &projectConfig{
 					Worker:       roleOverride{Agent: opts.workerAgent},
 					Orchestrator: roleOverride{Agent: opts.orchestratorAgent},
+					Architect:    roleOverride{Agent: opts.architectAgent},
 				}
 			}
 			var res projectResult
@@ -287,6 +291,7 @@ func newProjectAddCommand(ctx *commandContext) *cobra.Command {
 	f.StringVar(&opts.name, "name", "", "Display name")
 	f.StringVar(&opts.workerAgent, "worker-agent", "", "Default worker session agent")
 	f.StringVar(&opts.orchestratorAgent, "orchestrator-agent", "", "Default orchestrator session agent")
+	f.StringVar(&opts.architectAgent, "architect-agent", "", "Default architect session agent")
 	f.BoolVar(&opts.asWorkspace, "as-workspace", false, "Register a parent folder as a workspace project (root-as-repo plus direct child repos)")
 	return cmd
 }
@@ -336,6 +341,7 @@ func newProjectSetConfigCommand(ctx *commandContext) *cobra.Command {
 	f.StringVar(&opts.permission, "permission", "", "Permission mode: default, accept-edits, auto, bypass-permissions")
 	f.StringVar(&opts.workerAgent, "worker-agent", "", "Harness override for worker sessions")
 	f.StringVar(&opts.orchestratorAgent, "orchestrator-agent", "", "Harness override for orchestrator sessions")
+	f.StringVar(&opts.architectAgent, "architect-agent", "", "Harness override for architect sessions")
 	f.StringVar(&opts.agentRules, "agent-rules", "", "Project-specific standing instructions for worker sessions")
 	f.StringVar(&opts.agentRulesFile, "agent-rules-file", "", "Repo-relative file containing worker standing instructions")
 	f.StringVar(&opts.orchestratorRules, "orchestrator-rules", "", "Project-specific standing instructions for orchestrator sessions")
@@ -385,6 +391,7 @@ func buildProjectConfig(opts projectSetConfigOptions) (projectConfig, error) {
 		AgentConfig:       agentConfig{Model: opts.model, Permissions: opts.permission},
 		Worker:            roleOverride{Agent: opts.workerAgent},
 		Orchestrator:      roleOverride{Agent: opts.orchestratorAgent},
+		Architect:         roleOverride{Agent: opts.architectAgent},
 		TrackerIntake: trackerIntakeConfig{
 			Enabled:  opts.trackerIntake,
 			Repo:     opts.trackerRepo,

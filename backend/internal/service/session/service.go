@@ -311,6 +311,19 @@ func NewWithDeps(d Deps) *Service {
 // Spawn creates a session and returns the API-facing read model plus
 // ephemeral prompt size measurements.
 func (s *Service) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Session, int, int, error) {
+	cfg.Role = domain.NormalizeSessionRole(cfg.Kind, cfg.Role)
+	if !cfg.Role.Valid() {
+		return domain.Session{}, 0, 0, apierr.Invalid("INVALID_SESSION_ROLE", "role must be worker, architect, or orchestrator", nil)
+	}
+	if cfg.Role == domain.RoleArchitect && cfg.Kind != domain.KindWorker {
+		return domain.Session{}, 0, 0, apierr.Invalid("ARCHITECT_WORKER_REQUIRED", "architect sessions must be workers", nil)
+	}
+	if cfg.Role == domain.RoleOrchestrator && cfg.Kind != domain.KindOrchestrator {
+		return domain.Session{}, 0, 0, apierr.Invalid("ORCHESTRATOR_ROLE_REQUIRED", "orchestrator role requires an orchestrator session", nil)
+	}
+	if cfg.Role == domain.RoleArchitect && cfg.RequestedOutput == "" {
+		cfg.RequestedOutput = domain.RequestedOutputArtifact
+	}
 	if rec, found, err := s.replayClientRequest(ctx, cfg.ClientRequestID, cfg.ClientRequestHash); err != nil {
 		return domain.Session{}, 0, 0, err
 	} else if found {

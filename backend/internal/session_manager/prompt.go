@@ -12,6 +12,7 @@ type sessionPromptRole string
 const (
 	sessionPromptRoleOrchestrator sessionPromptRole = "orchestrator"
 	sessionPromptRoleWorker       sessionPromptRole = "worker"
+	sessionPromptRoleArchitect    sessionPromptRole = "architect"
 )
 
 type promptProject struct {
@@ -93,6 +94,18 @@ func buildSystemPromptText(cfg systemPromptConfig) string {
 			sections = append(sections, workerNativeReviewPrompt(cfg.Project, orchestratorID != ""))
 		}
 		sections = append(sections, workerMultiPRPrompt(), workerContainerLabelPrompt(), workerGitIsolationPrompt())
+		if rules := strings.TrimSpace(cfg.ProjectRules); rules != "" {
+			sections = append(sections, "## Project Rules\n"+rules)
+		}
+	case sessionPromptRoleArchitect:
+		if cfg.Standalone {
+			return ""
+		}
+		sections = append(sections, architectSystemPrompt(cfg.Project))
+		orchestratorID := strings.TrimSpace(cfg.OrchestratorSessionID)
+		if orchestratorID != "" {
+			sections = append(sections, workerOrchestratorPrompt(orchestratorID))
+		}
 		if rules := strings.TrimSpace(cfg.ProjectRules); rules != "" {
 			sections = append(sections, "## Project Rules\n"+rules)
 		}
@@ -248,6 +261,13 @@ Your job is to coordinate work, not to perform implementation. Keep the project 
 6. Route CI failures and review comments back to the responsible worker.
 7. Summarize status and blockers for the human.
 
+## Hybrid Architecture Communication
+
+- Use the architect role for cross-module design and technical RFCs. Do not route implementation chores, visual QA, routine tests, or data collection to the architect.
+- When an architect reports an RFC artifact, forward the architect session id and artifact path to the worker with only a concise summary, decisions, risks, and acceptance criteria.
+- Workers read the full RFC directly with `+"`ao artifact read --session <architect-session-id> --path <artifact-path>`"+`. Do not copy the RFC into `+"`ao send`"+` or into your own context.
+- Keep scheduling, dependency ordering, worker assignment, and final acceptance in the orchestrator session.
+
 ## In-App Session Links
 
 - When referring the human to an AO session in Chat or the AO terminal, include a clickable canonical link: `+"`ao://sessions/{project-id}/{session-id}`"+`.
@@ -384,13 +404,19 @@ How it works:
 }
 
 func workerOrchestratorPrompt(orchestratorID string) string {
-	return fmt.Sprintf(`## Orchestrator Coordination
+	return fmt.Sprintf("## Orchestrator Coordination\n\nAn active orchestrator session exists for this project.\n\nMessage it only for true blockers, cross-session coordination, or decisions you cannot resolve locally:\n\n`ao send --session %s --message \"<your message>\"`\n\n## Architecture RFC Handoff\n\nWhen the orchestrator gives you an architect session id and artifact path, read the full RFC directly instead of asking the orchestrator to paste it:\n\n`ao artifact read --session <architect-session-id> --path <artifact-path>`\n\nThe orchestrator should pass only the RFC reference plus a concise summary, decisions, risks, and acceptance criteria through coordination messages.", orchestratorID)
+}
 
-An active orchestrator session exists for this project.
+func architectSystemPrompt(project promptProject) string {
+	return fmt.Sprintf(`## AO Architect Role
 
-Message it only for true blockers, cross-session coordination, or decisions you cannot resolve locally:
+You are the project's architecture specialist for %s. Produce detailed technical RFCs and architectural decisions for the orchestrator; do not implement code, perform visual QA, run routine tests, collect data, or act as a progress coordinator.
 
-`+"`ao send --session %s --message \"<your message>\"`", orchestratorID)
+Only handle cross-module design, domain models and invariants, data flows and state machines, API/event contracts, permissions and security, migration and compatibility, reliability, observability, or other high-risk technical decisions.
+
+Every RFC must cover: goals and non-goals; current constraints; domain objects and invariants; module boundaries; data flow or state machine; API/event/data contracts; key sequences; failure and recovery; security; migration and compatibility; test matrix; observability; phased implementation; tradeoffs, risks, and acceptance criteria.
+
+Read the repository and relevant documents as needed, but do not modify source files. Write the complete RFC as a Markdown file in this session's artifact directory. Then report only a concise summary, key decisions, risks, and acceptance criteria, attaching the artifact path with `+"`ao report --done --artifact <path> --note \"<summary>\"`"+`. Workers will read the full RFC directly with `+"`ao artifact read --session <architect-session-id> --path <path>`"+`; never paste the full RFC into the orchestrator report.`, project.Name)
 }
 
 // workerMultiPRPrompt explains the branch convention AO uses to attribute pull

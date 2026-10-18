@@ -13918,6 +13918,12 @@ components:
           - cline
           - autohand
           type: string
+        role:
+          enum:
+          - worker
+          - architect
+          - orchestrator
+          type: string
         scmStatus:
           enum:
           - pr_open
@@ -13974,6 +13980,7 @@ components:
       required:
       - id
       - kind
+      - role
       - autoReviewEnabled
       - mode
       - activity
@@ -14980,6 +14987,11 @@ components:
           maxLength: 256
           type: string
         projectId:
+          type: string
+        role:
+          enum:
+          - worker
+          - architect
           type: string
         taskPreparation:
           type: string
@@ -16554,6 +16566,8 @@ components:
           type: string
         agentRulesFile:
           type: string
+        architect:
+          $ref: '#/components/schemas/RoleOverride'
         autoReview:
           type: boolean
         canonicalRepoURL:
@@ -18827,6 +18841,12 @@ components:
         requestedOutput:
           enum:
           - artifact
+          type: string
+        role:
+          enum:
+          - worker
+          - architect
+          - orchestrator
           type: string
         trackerProvider:
           enum:

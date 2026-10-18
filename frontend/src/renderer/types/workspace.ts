@@ -27,6 +27,7 @@ export type ChangedFile = {
 };
 
 export type SessionKind = "worker" | "orchestrator";
+export type SessionRole = "worker" | "architect" | "orchestrator";
 
 /** Lifecycle state of a single pull request, mirrors the daemon's enum. */
 export type PRState = "open" | "draft" | "merged" | "closed";
@@ -133,6 +134,7 @@ export type WorkspaceSession = {
 	/** Whether the daemon may automatically review this session after it becomes idle. */
 	autoReviewEnabled?: boolean;
 	kind?: SessionKind;
+	role?: SessionRole;
 	/**
 	 * Which controller is currently committed for this session. The session
 	 * surface renders from THIS value, never from the current creation default.

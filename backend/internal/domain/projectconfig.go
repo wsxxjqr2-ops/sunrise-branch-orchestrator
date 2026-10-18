@@ -48,8 +48,9 @@ type ProjectConfig struct {
 
 	// AgentConfig is the default agent config for the project.
 	AgentConfig AgentConfig `json:"agentConfig,omitempty"`
-	// Worker and Orchestrator are role-specific harness/agent-config overrides.
+	// Worker, Architect, and Orchestrator are role-specific harness/agent-config overrides.
 	Worker       RoleOverride `json:"worker,omitempty"`
+	Architect    RoleOverride `json:"architect,omitempty"`
 	Orchestrator RoleOverride `json:"orchestrator,omitempty"`
 
 	// Reviewers names the agent(s) that review a worker's PR when a review is
@@ -236,7 +237,7 @@ func (c ProjectConfig) Validate() error {
 		}
 		seenEnv[folded] = true
 	}
-	for role, ro := range map[string]RoleOverride{"worker": c.Worker, "orchestrator": c.Orchestrator} {
+	for role, ro := range map[string]RoleOverride{"worker": c.Worker, "architect": c.Architect, "orchestrator": c.Orchestrator} {
 		if ro.Harness != "" && !ro.Harness.IsKnown() {
 			return fmt.Errorf("%s.agent: unknown harness %q", role, ro.Harness)
 		}

@@ -969,9 +969,10 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	}
 	// A per-project role override picks the harness when the spawn names none,
 	// so a project can default workers to one agent and orchestrators to another.
-	cfg.Harness = effectiveHarness(cfg.Harness, cfg.Kind, project.Config)
+	cfg.Role = normalizedSessionRole(cfg.Kind, cfg.Role)
+	cfg.Harness = effectiveHarnessForRole(cfg.Harness, cfg.Kind, cfg.Role, project.Config)
 	if cfg.Harness == "" {
-		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn: %w: configure project %s.agent or pass --harness", ErrMissingHarness, roleConfigName(cfg.Kind))
+		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn: %w: configure project %s.agent or pass --harness", ErrMissingHarness, roleConfigNameFor(cfg.Kind, cfg.Role))
 	}
 	releaseHarness, err := m.beginHarnessUse(cfg.Harness)
 	if err != nil {
@@ -1004,7 +1005,7 @@ func (m *Manager) Spawn(ctx context.Context, cfg ports.SpawnConfig) (domain.Sess
 	// Resolve the effective agent config (project base + role override + spawn
 	// override) and validate the model before any durable state is created. A
 	// model the harness cannot honor should not leave a seed row behind.
-	agentConfig := applySpawnAgentConfig(effectiveAgentConfig(cfg.Harness, cfg.Kind, project.Config), cfg.AgentConfig)
+	agentConfig := applySpawnAgentConfig(effectiveAgentConfigForRole(cfg.Harness, cfg.Kind, cfg.Role, project.Config), cfg.AgentConfig)
 	if err := validateSpawnModel(cfg.Harness, agentConfig.Model); err != nil {
 		return domain.SessionRecord{}, 0, 0, fmt.Errorf("spawn: %w: %s", ErrUnsupportedModel, err.Error())
 	}
@@ -1580,7 +1581,7 @@ func (m *Manager) resolveTUIAgentConfig(ctx context.Context, cfg ports.SpawnConf
 }
 
 func (m *Manager) resolveAgentConfig(ctx context.Context, cfg ports.SpawnConfig, project domain.ProjectConfig) (ports.AgentConfig, error) {
-	base := effectiveAgentConfig(cfg.Harness, cfg.Kind, project)
+	base := effectiveAgentConfigForRole(cfg.Harness, cfg.Kind, cfg.Role, project)
 	requested := cfg.AgentConfig
 	resolved := applySpawnAgentConfig(base, requested)
 	modelChangedWithoutExplicitEffort := requested.Model != "" && requested.Model != base.Model &&
@@ -2214,20 +2215,48 @@ func (m *Manager) preserveFailedSpawnWorkspace(ctx context.Context, id domain.Se
 // otherwise the project's role override for the session kind applies. Empty is
 // invalid for new worker/orchestrator launches and is rejected by Spawn.
 func effectiveHarness(explicit domain.AgentHarness, kind domain.SessionKind, cfg domain.ProjectConfig) domain.AgentHarness {
+	return effectiveHarnessForRole(explicit, kind, normalizedSessionRole(kind, ""), cfg)
+}
+
+func normalizedSessionRole(kind domain.SessionKind, role domain.SessionRole) domain.SessionRole {
+	if role != "" {
+		return role
+	}
+	if kind == domain.KindOrchestrator {
+		return domain.RoleOrchestrator
+	}
+	return domain.RoleWorker
+}
+
+func effectiveHarnessForRole(explicit domain.AgentHarness, kind domain.SessionKind, role domain.SessionRole, cfg domain.ProjectConfig) domain.AgentHarness {
 	if explicit != "" {
 		return explicit
 	}
-	if role := roleOverride(kind, cfg).Harness; role != "" {
-		return role
+	if override := roleOverrideFor(kind, role, cfg).Harness; override != "" {
+		return override
+	}
+	// Architect is an optional specialization. Until a project configures its
+	// own harness, use the worker harness so the built-in UI action works on
+	// existing projects without a migration step.
+	if normalizedSessionRole(kind, role) == domain.RoleArchitect && cfg.Worker.Harness != "" {
+		return cfg.Worker.Harness
 	}
 	return ""
 }
 
 func roleConfigName(kind domain.SessionKind) string {
-	if kind == domain.KindOrchestrator {
+	return roleConfigNameFor(kind, normalizedSessionRole(kind, ""))
+}
+
+func roleConfigNameFor(kind domain.SessionKind, role domain.SessionRole) string {
+	switch normalized := normalizedSessionRole(kind, role); normalized {
+	case domain.RoleArchitect:
+		return "architect"
+	case domain.RoleOrchestrator:
 		return "orchestrator"
+	default:
+		return "worker"
 	}
-	return "worker"
 }
 
 // effectiveAgentConfig merges the role override's agent config over the
@@ -2239,27 +2268,42 @@ func roleConfigName(kind domain.SessionKind) string {
 // harness means "not pinned" and always matches. Permissions is
 // harness-neutral and is always inherited.
 func effectiveAgentConfig(harness domain.AgentHarness, kind domain.SessionKind, cfg domain.ProjectConfig) ports.AgentConfig {
+	return effectiveAgentConfigForRole(harness, kind, normalizedSessionRole(kind, ""), cfg)
+}
+
+func effectiveAgentConfigForRole(harness domain.AgentHarness, kind domain.SessionKind, role domain.SessionRole, cfg domain.ProjectConfig) ports.AgentConfig {
 	merged := cfg.AgentConfig
-	role := roleOverride(kind, cfg)
-	override := role.AgentConfig
-	harnessMatches := role.Harness == "" || role.Harness == harness
-	if harnessMatches && override.Model != "" {
-		merged.Model = override.Model
+	override := roleOverrideFor(kind, role, cfg)
+	roleConfig := override.AgentConfig
+	harnessMatches := override.Harness == "" || override.Harness == harness
+	if harnessMatches && roleConfig.Model != "" {
+		merged.Model = roleConfig.Model
 	}
-	if harnessMatches && override.Effort != "" {
-		merged.Effort = override.Effort
+	if harnessMatches && roleConfig.Effort != "" {
+		merged.Effort = roleConfig.Effort
 	}
-	if harnessMatches && override.Mode != "" {
-		merged.Mode = override.Mode
+	if harnessMatches && roleConfig.Mode != "" {
+		merged.Mode = roleConfig.Mode
 	}
-	if override.Permissions != "" {
-		merged.Permissions = override.Permissions
+	if roleConfig.Permissions != "" {
+		merged.Permissions = roleConfig.Permissions
 	}
 	return merged
 }
 
+func roleOverrideFor(kind domain.SessionKind, role domain.SessionRole, cfg domain.ProjectConfig) domain.RoleOverride {
+	switch normalized := normalizedSessionRole(kind, role); normalized {
+	case domain.RoleArchitect:
+		return cfg.Architect
+	case domain.RoleOrchestrator:
+		return cfg.Orchestrator
+	default:
+		return cfg.Worker
+	}
+}
+
 func restoredAgentConfig(rec domain.SessionRecord, cfg domain.ProjectConfig) ports.AgentConfig {
-	merged := effectiveAgentConfig(rec.Harness, rec.Kind, cfg)
+	merged := effectiveAgentConfigForRole(rec.Harness, rec.Kind, rec.Role, cfg)
 	if rec.Harness == domain.HarnessClaudeCode {
 		merged.Model = rec.Metadata.Model
 		merged.Effort = rec.Metadata.Effort
@@ -2334,10 +2378,7 @@ func validateSpawnModel(harness domain.AgentHarness, model string) error {
 }
 
 func roleOverride(kind domain.SessionKind, cfg domain.ProjectConfig) domain.RoleOverride {
-	if kind == domain.KindOrchestrator {
-		return cfg.Orchestrator
-	}
-	return cfg.Worker
+	return roleOverrideFor(kind, normalizedSessionRole(kind, ""), cfg)
 }
 
 // sessionPrefix returns the display prefix for a project: the explicit
@@ -3381,7 +3422,7 @@ func (m *Manager) relaunchSessionWithPolicyAndGeneration(ctx context.Context, op
 	}
 	// Recompute standing instructions, then reapply the durable finalized inbound
 	// handoff for this exact native conversation when one exists.
-	systemPrompt, err := m.buildSystemPrompt(ctx, rec.Kind, rec.ProjectID, rec.ID, rec.RequestedOutput, false)
+	systemPrompt, err := m.buildSystemPromptForRole(ctx, rec.Kind, rec.Role, rec.ProjectID, rec.ID, rec.RequestedOutput, false)
 	if err != nil {
 		return RestoreResult{}, fmt.Errorf("%s %s: system prompt: %w", operation, rec.ID, err)
 	}
@@ -5344,6 +5385,7 @@ func seedRecord(cfg ports.SpawnConfig, projectConfig domain.ProjectConfig, now t
 		ClientRequestID:   cfg.ClientRequestID,
 		ClientRequestHash: cfg.ClientRequestHash,
 		Kind:              cfg.Kind,
+		Role:              normalizedSessionRole(cfg.Kind, cfg.Role),
 		CreatedAt:         now,
 		UpdatedAt:         now,
 		Harness:           cfg.Harness,
@@ -5352,7 +5394,7 @@ func seedRecord(cfg ports.SpawnConfig, projectConfig domain.ProjectConfig, now t
 		// Resolved before this point and persisted here. There is no UPDATE
 		// statement that can change it afterwards.
 		Mode:              domain.NormalizeSessionMode(cfg.RequestedMode),
-		Metadata:          domain.SessionMetadata{Permissions: applySpawnAgentConfig(effectiveAgentConfig(cfg.Harness, cfg.Kind, projectConfig), cfg.AgentConfig).Permissions},
+		Metadata:          domain.SessionMetadata{Permissions: applySpawnAgentConfig(effectiveAgentConfigForRole(cfg.Harness, cfg.Kind, cfg.Role, projectConfig), cfg.AgentConfig).Permissions},
 		RequestedOutput:   cfg.RequestedOutput,
 		OutputType:        domain.SessionOutputNone,
 		AutoReviewEnabled: projectConfig.AutoReview,
@@ -5428,7 +5470,7 @@ func isDefaultDevDataDir(dataDir string) bool {
 
 func buildPrompt(cfg ports.SpawnConfig) string {
 	return buildTaskPrompt(taskPromptConfig{
-		Role:         promptRoleForKind(cfg.Kind),
+		Role:         promptRoleForSession(cfg.Kind, cfg.Role),
 		Prompt:       cfg.Prompt,
 		IssueID:      string(cfg.IssueID),
 		IssueContext: cfg.IssueContext,
@@ -5436,6 +5478,13 @@ func buildPrompt(cfg ports.SpawnConfig) string {
 }
 
 func promptRoleForKind(kind domain.SessionKind) sessionPromptRole {
+	return promptRoleForSession(kind, normalizedSessionRole(kind, ""))
+}
+
+func promptRoleForSession(kind domain.SessionKind, role domain.SessionRole) sessionPromptRole {
+	if normalizedSessionRole(kind, role) == domain.RoleArchitect {
+		return sessionPromptRoleArchitect
+	}
 	switch kind {
 	case domain.KindOrchestrator:
 		return sessionPromptRoleOrchestrator
@@ -5560,7 +5609,7 @@ func appendAttachmentReferences(prompt string, refs []string) string {
 // empty input box rather than receiving an auto-generated kickoff turn.
 func (m *Manager) buildSpawnTexts(ctx context.Context, cfg ports.SpawnConfig, sessionID domain.SessionID) (prompt, systemPrompt string, err error) {
 	prompt = buildPrompt(cfg)
-	systemPrompt, err = m.buildSystemPrompt(ctx, cfg.Kind, cfg.ProjectID, sessionID, cfg.RequestedOutput, domain.NormalizeSessionMode(cfg.RequestedMode) == domain.SessionModeChat)
+	systemPrompt, err = m.buildSystemPromptForRole(ctx, cfg.Kind, cfg.Role, cfg.ProjectID, sessionID, cfg.RequestedOutput, domain.NormalizeSessionMode(cfg.RequestedMode) == domain.SessionModeChat)
 	if err != nil {
 		return "", "", err
 	}
@@ -5575,20 +5624,43 @@ func (m *Manager) buildSpawnTexts(ctx context.Context, cfg ports.SpawnConfig, se
 // agent runs as a chat session, the only mode with the html tools and ao render.
 // requestedOutput is the deliverable requested at spawn.
 func (m *Manager) buildSystemPrompt(ctx context.Context, kind domain.SessionKind, projectID domain.ProjectID, sessionID domain.SessionID, requestedOutput domain.RequestedOutput, chat bool) (string, error) {
+	return m.buildSystemPromptForRole(ctx, kind, normalizedSessionRole(kind, ""), projectID, sessionID, requestedOutput, chat)
+}
+
+func (m *Manager) buildSystemPromptForRole(ctx context.Context, kind domain.SessionKind, role domain.SessionRole, projectID domain.ProjectID, sessionID domain.SessionID, requestedOutput domain.RequestedOutput, chat bool) (string, error) {
 	project, err := m.loadProject(ctx, projectID)
 	if err != nil {
 		return "", err
 	}
 	cfg := systemPromptConfig{
-		Role:       promptRoleForKind(kind),
+		Role:       promptRoleForSession(kind, role),
 		Standalone: projectID == "",
 		Project:    promptProjectContext(projectID, project),
 	}
 
-	switch kind {
-	case domain.KindOrchestrator:
+	switch normalizedSessionRole(kind, role) {
+	case domain.RoleOrchestrator:
 		cfg.OrchestratorRules = project.Config.OrchestratorRules
-	case domain.KindWorker:
+	case domain.RoleArchitect:
+		if projectID != "" {
+			orchestratorID, ok, err := m.activeOrchestratorSessionID(ctx, projectID)
+			if err != nil {
+				return "", err
+			}
+			if ok {
+				cfg.OrchestratorSessionID = string(orchestratorID)
+			}
+		}
+		rules, err := buildProjectRules(projectRulesConfig{
+			ProjectPath:    project.Path,
+			AgentRules:     project.Config.AgentRules,
+			AgentRulesFile: project.Config.AgentRulesFile,
+		})
+		if err != nil {
+			return "", err
+		}
+		cfg.ProjectRules = rules
+	case domain.RoleWorker:
 		if projectID != "" {
 			orchestratorID, ok, err := m.activeOrchestratorSessionID(ctx, projectID)
 			if err != nil {
