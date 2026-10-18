@@ -50,6 +50,7 @@ import { ReviewChangesMenu } from "./diffs/ReviewChangesMenu";
 import { ReviewBranchMenu } from "./diffs/ReviewBranchMenu";
 import { markFileViewerPerformance } from "../lib/file-viewer-performance";
 import { sessionUiKey } from "../lib/hosts";
+import { isSvgPath } from "../lib/image-files";
 import type { ProjectKind } from "../types/workspace";
 
 const WORKSPACE_SOURCE: FilesSource = { kind: "workspace" };
@@ -183,7 +184,7 @@ export function SessionFileExplorer({
 	const handleSelectPath = (node: TreeNode) => {
 		setPreviewRequest(null);
 		setSelectedPath(node.path);
-		if (!isMaximized) onOpenFile?.(node.path, { mode: "file" });
+		if (!isMaximized) onOpenFile?.(node.path, { mode: isSvgPath(node.path) ? "rendered" : "file" });
 	};
 	const handleViewChange = (next: boolean) => {
 		setPreviewRequest(null);
@@ -457,7 +458,7 @@ function ContentScrollArea({ children }: { children: ReactNode }) {
 			className="board-scrollbar h-full min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-background"
 			data-files-scroll-root=""
 		>
-			<div className="flex w-full flex-col px-0">{children}</div>
+			<div className="flex h-full min-h-0 w-full flex-col px-0">{children}</div>
 		</div>
 	);
 }

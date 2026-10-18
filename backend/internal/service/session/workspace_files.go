@@ -232,6 +232,7 @@ type WorkspaceFileDetail struct {
 	WorkspaceVersion   string
 	FileFingerprint    string
 	Historical         bool
+	fileModTime        time.Time
 }
 
 // UpdateWorkspaceFileInput replaces one existing text file. The fingerprint is
@@ -1307,6 +1308,7 @@ func workspaceFileDetail(ctx context.Context, id domain.SessionID, root, prefix,
 			return WorkspaceFileDetail{}, err
 		}
 		detail.Size = info.Size()
+		detail.fileModTime = info.ModTime()
 		content, binary, truncated, err := readWorkspaceTextFile(file, maxWorkspaceFileBytes)
 		if err != nil {
 			return WorkspaceFileDetail{}, err
@@ -1727,6 +1729,7 @@ func scratchWorkspaceFile(root string, id domain.SessionID, rel string) (Workspa
 		Binary:           binary,
 		ContentTruncated: truncated,
 		ImageMediaType:   workspaceImageDetailMediaType(rel, binary, false),
+		fileModTime:      info.ModTime(),
 	}
 	if !binary {
 		detail.Content = content
